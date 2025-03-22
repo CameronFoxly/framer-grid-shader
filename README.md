@@ -17,8 +17,8 @@ A React component that creates an interactive grid of squares that respond to mo
 
 1. Clone the repository:
 ```bash
-git clone https://github.com/cameronfoxly/shader.git
-cd shader
+git clone https://github.com/cameronfoxly/framer-grid-shader.git
+cd framer-grid-shader
 ```
 
 2. Install dependencies:
