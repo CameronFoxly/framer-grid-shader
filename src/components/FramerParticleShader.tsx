@@ -81,6 +81,25 @@ export function FramerParticleShader({
     const animationFrameRef = useRef<number>(0)
     const mousePositionRef = useRef<[number, number]>([0, 0])
     const lastTimeRef = useRef<number>(0)
+    
+    // Cache WebGL buffers and attribute locations
+    const buffersRef = useRef<{
+        square?: WebGLBuffer,
+        positionAttribute?: number,
+        squarePositionAttribute?: number,
+        currentSizeAttribute?: number
+    }>({})
+    
+    // Cache uniform locations
+    const uniformsRef = useRef<{
+        modelView?: WebGLUniformLocation | null,
+        projection?: WebGLUniformLocation | null,
+        mousePosition?: WebGLUniformLocation | null,
+        maxDistance?: WebGLUniformLocation | null,
+        minSize?: WebGLUniformLocation | null,
+        maxSize?: WebGLUniformLocation | null,
+        frontColor?: WebGLUniformLocation | null
+    }>({})
 
     // Handle canvas resize
     const resizeCanvas = () => {
@@ -142,7 +161,6 @@ export function FramerParticleShader({
 
     // Convert colors to RGB arrays
     const colorToRGB = (color: string): [number, number, number] => {
-        // Parse RGB format (handling the case where it might have a # prefix)
         const rgbMatch = color.match(/rgb\((\d+),\s*(\d+),\s*(\d+)\)/)
         if (rgbMatch) {
             const r = parseInt(rgbMatch[1], 10) / 255
@@ -150,17 +168,45 @@ export function FramerParticleShader({
             const b = parseInt(rgbMatch[3], 10) / 255
             return [r, g, b]
         }
-        
-        return [0, 0, 0] // Fallback to black if parsing fails
+        return [0, 0, 0]
     }
 
-    // Convert colors
     const frontColorRGB = colorToRGB(frontColor)
     const backColorRGB = colorToRGB(backColor)
 
-    useEffect(() => {
-        // Colors updated
-    }, [frontColor, backColor])
+    // Create and cache static buffers and attributes
+    const initBuffersAndAttributes = (gl: WebGLRenderingContext, program: WebGLProgram) => {
+        // Create square vertices once
+        const squareVertices = new Float32Array([
+            -0.5, -0.5,
+             0.5, -0.5,
+             0.5,  0.5,
+            -0.5,  0.5
+        ])
+
+        const squareBuffer = gl.createBuffer()
+        gl.bindBuffer(gl.ARRAY_BUFFER, squareBuffer)
+        gl.bufferData(gl.ARRAY_BUFFER, squareVertices, gl.STATIC_DRAW)
+
+        // Cache buffer and attribute locations
+        buffersRef.current = {
+            square: squareBuffer,
+            positionAttribute: gl.getAttribLocation(program, "position"),
+            squarePositionAttribute: gl.getAttribLocation(program, "squarePosition"),
+            currentSizeAttribute: gl.getAttribLocation(program, "currentSize")
+        }
+
+        // Cache uniform locations
+        uniformsRef.current = {
+            modelView: gl.getUniformLocation(program, "modelViewMatrix"),
+            projection: gl.getUniformLocation(program, "projectionMatrix"),
+            mousePosition: gl.getUniformLocation(program, "mousePosition"),
+            maxDistance: gl.getUniformLocation(program, "maxDistance"),
+            minSize: gl.getUniformLocation(program, "minSize"),
+            maxSize: gl.getUniformLocation(program, "maxSize"),
+            frontColor: gl.getUniformLocation(program, "frontColor")
+        }
+    }
 
     const initShaders = (gl: WebGLRenderingContext) => {
         const vertexShader = gl.createShader(gl.VERTEX_SHADER)!
@@ -194,19 +240,25 @@ export function FramerParticleShader({
         return program
     }
 
+    // Optimized grid creation with precalculated values
     const createGrid = (width: number, height: number, squareSize: number) => {
         const squares: Square[] = []
         const spacing = squareSize / 2
+        const cols = Math.ceil(width / spacing) + 1
+        const rows = Math.ceil(height / spacing) + 1
 
-        for (let x = 0; x < width + squareSize; x += spacing) {
-            for (let y = 0; y < height + squareSize; y += spacing) {
-                squares.push({
-                    position: [x, y],  // Use actual position without offset
+        squares.length = cols * rows // Pre-allocate array
+        let index = 0
+
+        for (let x = 0; x < cols; x++) {
+            for (let y = 0; y < rows; y++) {
+                squares[index++] = {
+                    position: [x * spacing, y * spacing],
                     scale: 1.0,
                     currentSize: maxSize,
                     targetSize: maxSize,
                     lastUpdateTime: 0
-                })
+                }
             }
         }
 
@@ -218,82 +270,59 @@ export function FramerParticleShader({
         const program = programRef.current
         if (!gl || !program) return
 
-        // Update animation times
-        const deltaTime = (timestamp - lastTimeRef.current) / 1000 // Convert to seconds
+        const deltaTime = (timestamp - lastTimeRef.current) / 1000
         lastTimeRef.current = timestamp
 
-        // Clear with background color
-        gl.clearColor(...backColorRGB, 1.0)
+        gl.clearColor(backColorRGB[0], backColorRGB[1], backColorRGB[2], 1.0)
         gl.clear(gl.COLOR_BUFFER_BIT)
 
         const modelViewMatrix = mat4.create()
         const projectionMatrix = mat4.create()
         mat4.ortho(projectionMatrix, 0, gl.canvas.width, gl.canvas.height, 0, -1, 1)
 
-        // Get uniform locations
-        const modelViewUniform = gl.getUniformLocation(program, "modelViewMatrix")
-        const projectionUniform = gl.getUniformLocation(program, "projectionMatrix")
-        const mousePositionUniform = gl.getUniformLocation(program, "mousePosition")
-        const maxDistanceUniform = gl.getUniformLocation(program, "maxDistance")
-        const minSizeUniform = gl.getUniformLocation(program, "minSize")
-        const maxSizeUniform = gl.getUniformLocation(program, "maxSize")
-        const frontColorUniform = gl.getUniformLocation(program, "frontColor")
+        // Use cached uniform locations
+        const uniforms = uniformsRef.current
+        const buffers = buffersRef.current
 
-        // Set uniforms
-        gl.uniformMatrix4fv(modelViewUniform, false, modelViewMatrix)
-        gl.uniformMatrix4fv(projectionUniform, false, projectionMatrix)
-        gl.uniform2f(mousePositionUniform, mousePositionRef.current[0], mousePositionRef.current[1])
-        gl.uniform1f(maxDistanceUniform, proximityRange)
-        gl.uniform1f(minSizeUniform, minSize)
-        gl.uniform1f(maxSizeUniform, maxSize)
-        gl.uniform3f(frontColorUniform, ...frontColorRGB)
+        // Set uniforms using cached locations
+        gl.uniformMatrix4fv(uniforms.modelView!, false, modelViewMatrix)
+        gl.uniformMatrix4fv(uniforms.projection!, false, projectionMatrix)
+        gl.uniform2f(uniforms.mousePosition!, mousePositionRef.current[0], mousePositionRef.current[1])
+        gl.uniform1f(uniforms.maxDistance!, proximityRange)
+        gl.uniform1f(uniforms.minSize!, minSize)
+        gl.uniform1f(uniforms.maxSize!, maxSize)
+        gl.uniform3f(uniforms.frontColor!, frontColorRGB[0], frontColorRGB[1], frontColorRGB[2])
 
-        // Create square vertices
-        const squareVertices = new Float32Array([
-            -0.5, -0.5,
-             0.5, -0.5,
-             0.5,  0.5,
-            -0.5,  0.5
-        ])
+        // Set up vertex attributes using cached buffer and locations
+        gl.bindBuffer(gl.ARRAY_BUFFER, buffers.square!)
+        gl.enableVertexAttribArray(buffers.positionAttribute!)
+        gl.vertexAttribPointer(buffers.positionAttribute!, 2, gl.FLOAT, false, 0, 0)
 
-        // Create and bind buffer for square vertices
-        const squareBuffer = gl.createBuffer()
-        gl.bindBuffer(gl.ARRAY_BUFFER, squareBuffer)
-        gl.bufferData(gl.ARRAY_BUFFER, squareVertices, gl.STATIC_DRAW)
+        // Cache squared proximity range for faster distance checks
+        const proximityRangeSquared = proximityRange * proximityRange
+        const mousePos = mousePositionRef.current
 
-        // Set up position attribute
-        const positionAttribute = gl.getAttribLocation(program, "position")
-        gl.enableVertexAttribArray(positionAttribute)
-        gl.vertexAttribPointer(positionAttribute, 2, gl.FLOAT, false, 0, 0)
-
-        // Draw each square
+        // Draw each square with optimized distance calculation
         squaresRef.current.forEach((square) => {
-            const mousePos = mousePositionRef.current
-            const diff = [
-                square.position[0] - mousePos[0],
-                square.position[1] - mousePos[1]
-            ]
-            const dist = Math.sqrt(diff[0] * diff[0] + diff[1] * diff[1])
+            const dx = square.position[0] - mousePos[0]
+            const dy = square.position[1] - mousePos[1]
+            // Use squared distance to avoid square root
+            const distSquared = dx * dx + dy * dy
             
-            // Calculate target size based on distance
-            const distanceScale = Math.min(dist / proximityRange, 1.0)
-            const newTargetSize = minSize + (maxSize - minSize) * distanceScale
+            // Calculate target size based on squared distance
+            const distanceScale = Math.min(distSquared / proximityRangeSquared, 1.0)
+            const newTargetSize = minSize + (maxSize - minSize) * Math.sqrt(distanceScale)
             
-            // Update target size
             square.targetSize = newTargetSize
             
-            // Smoothly interpolate current size towards target size
             const timeDiff = (timestamp - square.lastUpdateTime) / 1000
             const easeDuration = square.currentSize > square.targetSize ? easeInDuration : easeOutDuration
             const t = Math.min(timeDiff / easeDuration, 1.0)
             square.currentSize += (square.targetSize - square.currentSize) * t
             square.lastUpdateTime = timestamp
 
-            const squarePositionAttribute = gl.getAttribLocation(program, "squarePosition")
-            const currentSizeAttribute = gl.getAttribLocation(program, "currentSize")
-
-            gl.vertexAttrib2f(squarePositionAttribute, square.position[0], square.position[1])
-            gl.vertexAttrib1f(currentSizeAttribute, square.currentSize)
+            gl.vertexAttrib2f(buffers.squarePositionAttribute!, square.position[0], square.position[1])
+            gl.vertexAttrib1f(buffers.currentSizeAttribute!, square.currentSize)
 
             gl.drawArrays(gl.TRIANGLE_FAN, 0, 4)
         })
@@ -318,15 +347,16 @@ export function FramerParticleShader({
         }
 
         gl.useProgram(program)
-
-        // Enable blending for smooth edges
         gl.enable(gl.BLEND)
         gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA)
 
         glRef.current = gl
         programRef.current = program
 
-        // Create grid of squares
+        // Initialize buffers and attributes
+        initBuffersAndAttributes(gl, program)
+
+        // Create initial grid
         squaresRef.current = createGrid(canvas.width, canvas.height, maxSize)
 
         render(0)
@@ -334,6 +364,11 @@ export function FramerParticleShader({
         return () => {
             if (animationFrameRef.current) {
                 cancelAnimationFrame(animationFrameRef.current)
+            }
+            // Cleanup WebGL resources
+            if (gl) {
+                gl.deleteBuffer(buffersRef.current.square!)
+                gl.deleteProgram(program)
             }
         }
     }, [maxSize, frontColorRGB, backColorRGB, proximityRange, minSize, easeInDuration, easeOutDuration])
