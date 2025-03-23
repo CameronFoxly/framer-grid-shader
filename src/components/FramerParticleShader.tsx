@@ -82,6 +82,64 @@ export function FramerParticleShader({
     const mousePositionRef = useRef<[number, number]>([0, 0])
     const lastTimeRef = useRef<number>(0)
 
+    // Handle canvas resize
+    const resizeCanvas = () => {
+        const canvas = canvasRef.current
+        if (!canvas) return
+
+        // Get the display size of the canvas
+        const displayWidth = canvas.clientWidth
+        const displayHeight = canvas.clientHeight
+
+        // Check if the canvas is not the same size
+        if (canvas.width !== displayWidth || canvas.height !== displayHeight) {
+            // Make the canvas the same size
+            canvas.width = displayWidth
+            canvas.height = displayHeight
+
+            // Update the WebGL viewport
+            const gl = glRef.current
+            if (gl) {
+                gl.viewport(0, 0, displayWidth, displayHeight)
+            }
+
+            // Recreate the grid with new dimensions
+            squaresRef.current = createGrid(displayWidth, displayHeight, maxSize)
+        }
+    }
+
+    // Add resize handler
+    useEffect(() => {
+        const handleResize = () => {
+            resizeCanvas()
+        }
+
+        window.addEventListener('resize', handleResize)
+        // Initial resize
+        resizeCanvas()
+
+        return () => {
+            window.removeEventListener('resize', handleResize)
+        }
+    }, [maxSize])
+
+    // Update mouse position with proper scaling
+    const updateMousePosition = (e: MouseEvent) => {
+        const canvas = canvasRef.current
+        if (!canvas) return
+
+        const rect = canvas.getBoundingClientRect()
+        const x = e.clientX - rect.left
+        const y = e.clientY - rect.top
+
+        mousePositionRef.current = [x, y]
+    }
+
+    useEffect(() => {
+        window.addEventListener("mousemove", updateMousePosition)
+        return () => window.removeEventListener("mousemove", updateMousePosition)
+    }, [])
+
     // Convert colors to RGB arrays
     const colorToRGB = (color: string): [number, number, number] => {
         // Parse RGB format (handling the case where it might have a # prefix)
@@ -280,41 +338,14 @@ export function FramerParticleShader({
         }
     }, [maxSize, frontColorRGB, backColorRGB, proximityRange, minSize, easeInDuration, easeOutDuration])
 
-    useEffect(() => {
-        const canvas = canvasRef.current
-        if (!canvas) return
-
-        const handleMouseMove = (e: MouseEvent) => {
-            const rect = canvas.getBoundingClientRect()
-            const scaleX = canvas.width / rect.width
-            const scaleY = canvas.height / rect.height
-            
-            mousePositionRef.current = [
-                (e.clientX - rect.left) * scaleX,
-                (e.clientY - rect.top) * scaleY
-            ]
-        }
-
-        window.addEventListener("mousemove", handleMouseMove)
-        return () => window.removeEventListener("mousemove", handleMouseMove)
-    }, [])
-
-    // Update grid when maxSize changes
-    useEffect(() => {
-        const canvas = canvasRef.current
-        if (!canvas) return
-        squaresRef.current = createGrid(canvas.width, canvas.height, maxSize)
-    }, [maxSize])
-
     return (
         <canvas
             ref={canvasRef}
             style={{
                 width: "100%",
                 height: "100%",
+                display: "block" // Prevent extra space at bottom
             }}
-            width={window.innerWidth}
-            height={window.innerHeight}
         />
     )
 }
