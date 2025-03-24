@@ -1,6 +1,6 @@
-# Interactive WebGL Grid Shader
+# Interactive WebGL Grid Shader for Framer
 
-A React component that creates an interactive grid of squares that respond to mouse movement with smooth animations. Built with WebGL for optimal performance.
+Code for a  that creates an interactive grid of squares that respond to mouse movement with smooth animations. Built with WebGL for optimal performance.
 
 ## Features
 
@@ -33,17 +33,7 @@ npm start
 
 ## Usage
 
-Import the `ParticleShader` component into your React application:
-
-```jsx
-import { ParticleShader } from './components/ParticleShader';
-
-function App() {
-  return (
-    <ParticleShader />
-  );
-}
-```
+Copy and paste the entire code from `src/components/FramerParticleShader.tsx` into a new Code File set to `override`. Then use it like you would any component.
 
 ## Controls
 
