@@ -4,7 +4,7 @@
 
 A Framer custom code component that creates an interactive grid of squares that respond to mouse movement with smooth animations. Built with WebGL for optimal performance.
 
-Note: Vibe-coded with GitHub Copilot, so excuse some of the clunky formatting. The `particleshader.tsx` file is for testing locally with a custom UI for testing values, and then the `Framerparticleshader.tsx` file is the one that actually goes into Framer and exposes those controls as properties. 
+Note: Vibe-coded with GitHub Copilot, so excuse some of the clunky formatting. The `src/components/particleshader.tsx` file is for testing locally with a custom UI for testing values, and then the `src/components/Framerparticleshader.tsx` file is the one that actually goes into Framer and exposes those controls as properties. 
 
 ## Features
 
