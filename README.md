@@ -1,6 +1,6 @@
 # Interactive WebGL Grid Shader for Framer
 
-![Screenshot 2025-03-24 at 9 45 56 AM](https://github.com/user-attachments/assets/6eb53be3-5cc7-4a70-861a-13fb63f45abc)
+![framerShader](https://github.com/user-attachments/assets/c4a29eb1-7d0c-4a9e-bfef-3ec36e5f5f46)
 
 A Framer custom code component that creates an interactive grid of squares that respond to mouse movement with smooth animations. Built with WebGL for optimal performance.
 
